@@ -103,7 +103,11 @@ class Program
         byte groupNumber = 0;
         var addressValuePairs = new List<KeyValuePair<ushort, byte>>();
 
-        if (string.Compare(command, "ReadEeprom", ignoreCase: true) == 0 ||
+
+        if (string.Compare(command, "TryKWP2000DDLI", ignoreCase: true) == 0){
+
+        }
+        else if (string.Compare(command, "ReadEeprom", ignoreCase: true) == 0 ||
             string.Compare(command, "ReadRAM", ignoreCase: true) == 0 ||
             string.Compare(command, "ReadROM", ignoreCase: true) == 0 ||
             string.Compare(command, "WriteRAM", ignoreCase: true) == 0)
@@ -275,6 +279,7 @@ class Program
         
         switch (command.ToLower())
         {
+ 
             case "autoscan":
                 AutoScan(@interface);
                 return;
@@ -307,6 +312,9 @@ class Program
 
         switch (command.ToLower())
         {
+            case "trykwp2000ddli":
+                tester.TryKwp2000Ddli();
+                return;
             case "actuatortest":
                 tester.ActuatorTest();
                 break;

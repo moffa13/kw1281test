@@ -1,6 +1,7 @@
 ﻿using BitFab.KW1281Test.Cluster;
 using BitFab.KW1281Test.EDC15;
 using BitFab.KW1281Test.Interface;
+using BitFab.KW1281Test.Kwp2000;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -22,6 +23,222 @@ internal class Tester
         _kwpCommon = new KwpCommon(@interface);
         _kwp1281 = new KW1281Dialog(_kwpCommon);
         _controllerAddress = controllerAddress;
+    }
+
+    private static string BytesToHex(IEnumerable<byte> bytes)
+    {
+        return string.Join(" ", bytes.Select(b => b.ToString("X2")));
+    }
+
+    private static void TryDdliRequest(KW2000Dialog kwp2000, DiagnosticService service, byte[] body, string description)
+    {
+        Log.WriteLine("");
+        Log.WriteLine(description);
+
+        Log.WriteLine(
+            $"TX: {(byte)service:X2}" +
+            (body.Length > 0
+                ? $" {BytesToHex(body)}"
+                : ""));
+
+        try
+        {
+            var response = kwp2000.SendReceive(service, body);
+
+            Log.WriteLine($"RX body: {BytesToHex(response.Body)}");
+
+            if (response.IsPositiveResponse(service))
+            {
+                Log.WriteLine(
+                    $"Positive response to service 0x{(byte)service:X2}.");
+
+                return;
+            }
+
+            DecodeNegativeKwpResponse(
+                service,
+                response.Body);
+        }
+        catch (Exception ex)
+        {
+            Log.WriteLine(
+                $"Request failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private static void SendAndLog(
+        KW2000Dialog kwp2000,
+        DiagnosticService service,
+        byte[] body,
+        string description)
+    {
+        Log.WriteLine(description);
+        Log.WriteLine(
+            $"TX: {(byte)service:X2} {BytesToHex(body)}");
+
+        var response = kwp2000.SendReceive(service, body);
+
+        Log.WriteLine(
+            $"RX body: {BytesToHex(body)}");
+
+        if (!response.IsPositiveResponse(service))
+        {
+            DecodeNegativeKwpResponse(service, response.Body);
+        }
+    }
+
+    private static void DecodeNegativeKwpResponse(
+        DiagnosticService requestedService,
+        List<byte> body)
+    {
+        /*
+         * Selon KW2000Dialog, le SID 0x7F et le SID demandé peuvent être
+         * retirés du Body. On affiche donc d'abord les données brutes.
+         */
+
+        if (body.Count == 0)
+        {
+            Log.WriteLine("Negative or unexpected response with empty body.");
+            return;
+        }
+
+        byte nrc;
+
+        if (body.Count >= 3 &&
+            body[0] == 0x7F &&
+            body[1] == (byte)requestedService)
+        {
+            nrc = body[2];
+        }
+        else if (body.Count >= 2 &&
+                 body[0] == (byte)requestedService)
+        {
+            nrc = body[1];
+        }
+        else
+        {
+            // Cas probable si KW2000Dialog a déjà retiré les SID.
+            nrc = body[^1];
+        }
+
+        Log.WriteLine(
+            $"Negative response: NRC 0x{nrc:X2} " +
+            $"({DescribeKwpNrc(nrc)})");
+    }
+
+    private static string DescribeKwpNrc(byte nrc)
+    {
+        return nrc switch
+        {
+            0x10 => "generalReject",
+            0x11 => "serviceNotSupported",
+            0x12 => "subFunctionNotSupportedInvalidFormat",
+            0x21 => "busyRepeatRequest",
+            0x22 => "conditionsNotCorrect",
+            0x23 => "routineNotComplete",
+            0x31 => "requestOutOfRange",
+            0x33 => "securityAccessDenied",
+            0x35 => "invalidKey",
+            0x36 => "exceedNumberOfAttempts",
+            0x37 => "requiredTimeDelayNotExpired",
+            0x40 => "downloadNotAccepted",
+            0x50 => "uploadNotAccepted",
+            0x71 => "transferSuspended",
+            0x72 => "transferAborted",
+            0x74 => "illegalAddressInBlockTransfer",
+            0x75 => "illegalByteCountInBlockTransfer",
+            0x76 => "illegalBlockTransferType",
+            0x77 => "blockTransferDataChecksumError",
+            0x78 => "requestCorrectlyReceivedResponsePending",
+            0x79 => "incorrectByteCountDuringBlockTransfer",
+            0x7E => "subFunctionNotSupportedInActiveSession",
+            0x7F => "serviceNotSupportedInActiveSession",
+            _ => "unknownNrc"
+        };
+    }
+
+    public void TryKwp2000Ddli()
+    {
+        _kwp1281.EndCommunication();
+
+        Thread.Sleep(1000);
+
+        _kwpCommon!.Interface.SetBaudRate(10400);
+
+        var kwpVersion = _kwpCommon.WakeUp(
+            (byte)_controllerAddress,
+            evenParity: false);
+
+        if (kwpVersion < 2000)
+        {
+            throw new InvalidOperationException(
+                $"Unable to wake up ECU in KWP2000 mode. KW version: {kwpVersion}");
+        }
+
+        Log.WriteLine($"KW Version: {kwpVersion}");
+
+        var kwp2000 = new KW2000Dialog(
+            _kwpCommon,
+            (byte)_controllerAddress);
+
+        // Même ouverture de session que pour ReadWriteEeprom().
+        SendAndLog(
+            kwp2000,
+            DiagnosticService.startDiagnosticSession,
+            [0x89],
+            "StartDiagnosticSession 0x89");
+
+        SendAndLog(
+            kwp2000,
+            DiagnosticService.startDiagnosticSession,
+            [0x85],
+            "StartDiagnosticSession 0x85");
+
+
+        Log.WriteLine("");
+        Log.WriteLine("Testing KWP2000 custom DDLI service 0x28...");
+
+        TryDdliRequest(
+        kwp2000,
+        (DiagnosticService)0x28,
+        [0x04, 0x75, 0xC3, 0x02],
+        "ReadMemoryByAddress (empty)");
+        Thread.Sleep(200);
+
+        TryDdliRequest(
+        kwp2000,
+        (DiagnosticService)0x28,
+        [0x04, 0x7D, 0xC3, 0x02],
+        "ReadMemoryByAddress (empty)");
+        Thread.Sleep(200);
+
+        TryDdliRequest(
+        kwp2000,
+        (DiagnosticService)0x28,
+        [0x04, 0xc8, 0x20, 0xF],
+        "ReadMemoryByAddress (empty)");
+        Thread.Sleep(200);
+
+
+        SendAndLog(
+            kwp2000,
+            DiagnosticService.stopDiagnosticSession,
+            [0x85],
+            "stopDiagnosticSession 0x20");
+
+        Thread.Sleep(100);
+
+        SendAndLog(
+            kwp2000,
+            DiagnosticService.stopCommunication,
+            [],
+            "stopCommunication 0x82");
+
+        Thread.Sleep(2000);
+
+
+
+
     }
 
     public ControllerInfo Kwp1281Wakeup(bool evenParityWakeup = false, bool failQuietly = false)
