@@ -104,8 +104,8 @@ class Program
         var addressValuePairs = new List<KeyValuePair<ushort, byte>>();
 
 
-        if (string.Compare(command, "TryKWP2000DDLI", ignoreCase: true) == 0){
-
+        if (string.Compare(command, "TryKWP1281DDLI", ignoreCase: true) == 0){
+            // Nothing for now
         }
         else if (string.Compare(command, "ReadEeprom", ignoreCase: true) == 0 ||
             string.Compare(command, "ReadRAM", ignoreCase: true) == 0 ||
@@ -312,8 +312,8 @@ class Program
 
         switch (command.ToLower())
         {
-            case "trykwp2000ddli":
-                tester.TryKwp2000Ddli();
+            case "trykwp1281ddli":
+                tester.TryKwp1281Ddli();
                 return;
             case "actuatortest":
                 tester.ActuatorTest();

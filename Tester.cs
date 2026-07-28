@@ -1,11 +1,14 @@
-﻿using BitFab.KW1281Test.Cluster;
+﻿using BitFab.KW1281Test.Blocks;
+using BitFab.KW1281Test.Cluster;
 using BitFab.KW1281Test.EDC15;
 using BitFab.KW1281Test.Interface;
 using BitFab.KW1281Test.Kwp2000;
+using BitFab.KW1281Test.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 
@@ -157,87 +160,36 @@ internal class Tester
         };
     }
 
-    public void TryKwp2000Ddli()
+    public void TryKwp1281Ddli()
     {
-        _kwp1281.EndCommunication();
+        // Read 128 bytes from address 0xC820 in RAM
+        var bytes = new List<byte>
+            {
+                (byte)(0x13),
+                (byte)(0x04),
+                (byte)(0x00),
+                (byte)(0xc8),
+                (byte)(0x20),
+                (byte)(0x80)
+            };
+        _kwp1281.SendBlock(bytes);
 
-        Thread.Sleep(1000);
-
-        _kwpCommon!.Interface.SetBaudRate(10400);
-
-        var kwpVersion = _kwpCommon.WakeUp(
-            (byte)_controllerAddress,
-            evenParity: false);
-
-        if (kwpVersion < 2000)
+        var responseBlock = _kwp1281.ReceiveBlock();
+        if (responseBlock is NakBlock)
         {
-            throw new InvalidOperationException(
-                $"Unable to wake up ECU in KWP2000 mode. KW version: {kwpVersion}");
+            Log.WriteLine("Command Not Available");
+            Log.WriteLine(BitConverter.ToString(responseBlock.Bytes.ToArray()));
         }
+        
 
-        Log.WriteLine($"KW Version: {kwpVersion}");
+        /* Output generated:
 
-        var kwp2000 = new KW2000Dialog(
-            _kwpCommon,
-            (byte)_controllerAddress);
+        Received "Read ROM/EEPROM Response" block: FF FF FF FF FF FF 01 FF 00 00 0A FF FF FF FF FF FF FF 2F 2F FF FF FF FF FF
+            FF FF FF C1 FF 93 00 05 00 93 00 00 00 F0 D8 00 00 00 00 00 00 89 00 05 00 93 00 00 0A 03 14 00 00 00 00 BB 87 FC
+            85 05 00 00 00 BE BF BC B6 00 B3 FF FF 00 00 B4 B5 00 00 B8 0B 96 07 E3 CE 01 00 FF 00 00 0A 08 00 FF 00 00 00 00
+            00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 
-        // Même ouverture de session que pour ReadWriteEeprom().
-        SendAndLog(
-            kwp2000,
-            DiagnosticService.startDiagnosticSession,
-            [0x89],
-            "StartDiagnosticSession 0x89");
-
-        SendAndLog(
-            kwp2000,
-            DiagnosticService.startDiagnosticSession,
-            [0x85],
-            "StartDiagnosticSession 0x85");
-
-
-        Log.WriteLine("");
-        Log.WriteLine("Testing KWP2000 custom DDLI service 0x28...");
-
-        TryDdliRequest(
-        kwp2000,
-        (DiagnosticService)0x28,
-        [0x04, 0x75, 0xC3, 0x02],
-        "ReadMemoryByAddress (empty)");
-        Thread.Sleep(200);
-
-        TryDdliRequest(
-        kwp2000,
-        (DiagnosticService)0x28,
-        [0x04, 0x7D, 0xC3, 0x02],
-        "ReadMemoryByAddress (empty)");
-        Thread.Sleep(200);
-
-        TryDdliRequest(
-        kwp2000,
-        (DiagnosticService)0x28,
-        [0x04, 0xc8, 0x20, 0xF],
-        "ReadMemoryByAddress (empty)");
-        Thread.Sleep(200);
-
-
-        SendAndLog(
-            kwp2000,
-            DiagnosticService.stopDiagnosticSession,
-            [0x85],
-            "stopDiagnosticSession 0x20");
-
-        Thread.Sleep(100);
-
-        SendAndLog(
-            kwp2000,
-            DiagnosticService.stopCommunication,
-            [],
-            "stopCommunication 0x82");
-
-        Thread.Sleep(2000);
-
-
-
+        */
 
     }
 
@@ -539,14 +491,14 @@ internal class Tester
                 Log.WriteLine($"{login:D5} succeeded");
                 continue;
             }
-            catch(TimeoutException)
+            catch (TimeoutException)
             {
                 _kwp1281.SetDisconnected();
                 try
                 {
                     Kwp1281Wakeup();
                 }
-                catch(InvalidOperationException)
+                catch (InvalidOperationException)
                 {
                     _kwp1281.SetDisconnected();
                     Kwp1281Wakeup();
