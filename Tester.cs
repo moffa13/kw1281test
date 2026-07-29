@@ -162,8 +162,13 @@ internal class Tester
 
     public void TryKwp1281Ddli()
     {
-        // Read 128 bytes from address 0xC820 in RAM
-        var bytes = new List<byte>
+        
+   
+
+        while (true) {
+
+            // Read 128 bytes from address 0xC820 in RAM
+            var bytes = new List<byte>
             {
                 (byte)(0x13),
                 (byte)(0x04),
@@ -172,14 +177,18 @@ internal class Tester
                 (byte)(0x20),
                 (byte)(0x80)
             };
-        _kwp1281.SendBlock(bytes);
 
-        var responseBlock = _kwp1281.ReceiveBlock();
-        if (responseBlock is NakBlock)
-        {
-            Log.WriteLine("Command Not Available");
-            Log.WriteLine(BitConverter.ToString(responseBlock.Bytes.ToArray()));
+            Log.WriteLine(BitConverter.ToString(bytes.ToArray()));
+            _kwp1281.SendBlock(bytes);
+
+            var responseBlock = _kwp1281.ReceiveBlock();
+            if (responseBlock is NakBlock)
+            {
+                Log.WriteLine("Command Not Available");
+                Log.WriteLine(BitConverter.ToString(responseBlock.Bytes.ToArray()));
+            }
         }
+        
         
 
         /* Output generated:
